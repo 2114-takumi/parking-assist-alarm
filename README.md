@@ -104,15 +104,21 @@ ECHOの待機と計測には、それぞれ最大40,000回のループ制限が�
 | 発音処理や待ち時間の間は次の距離測定を行わず、距離ごとに再測定までの間隔が変わる。 | 必要に応じてタイマーや状態管理を使い、警告動作を非ブロッキング化する。 |
 | コード上の8MHz設定と実機クロックの一致が未確認。 | クロック源、分周、ヒューズ設定を確認し、計測・警告音の時間計算と対応させる。 |
 
-公開準備に使用した環境にはAVR-GCCが見つからなかったため、掲載ソースコードのコンパイル検証は未実施です。製作時の実機での動作確認と、公開するソースコードのビルド検証は別の作業として扱います。距離の計測精度や警告音の実周波数を定量評価したデータは掲載していません。
+2026年10月21日、公開する`main.c`をWindows環境でビルドし、警告・エラーなしでコンパイルとリンクが成功することを確認しました。Intel HEX形式のファイル生成も確認済みです。
 
-ATtiny84Aに対応するAVR-GCCとavr-libcを用意した環境でのビルドコマンド例です。このコマンド自体も、公開準備の環境では未検証です。
+使用したツールチェーンはArduino公式配布のAVR-GCC（`7.3.0-atmel3.6.1-arduino7`、GCC 7.3.0、avr-libc 2.0.0）です。配布元とチェックサムは[Arduino公式パッケージ一覧](https://downloads.arduino.cc/packages/package_index.json)で確認できます。次のコマンド相当で検証しました。
 
 ```sh
 avr-gcc -mmcu=attiny84a -std=gnu99 -Os -Wall -Wextra main.c -o parking-assist-alarm.elf
+avr-objcopy -O ihex -R .eeprom parking-assist-alarm.elf parking-assist-alarm.hex
+avr-size parking-assist-alarm.elf
 ```
 
-対象デバイスは[GCCのAVRオプション](https://gcc.gnu.org/onlinedocs/gcc/AVR-Options.html)に記載されています。`_delay_us()`・`_delay_ms()`は最適化を有効にしたビルドを前提とするため、上記の例では`-Os`を指定しています（[avr-libcの遅延関数仕様](https://www.nongnu.org/avr-libc/user-manual/group__util__delay.html)）。このコマンドはプログラムのビルドのみを行い、実機への書き込みやヒューズ設定は行いません。
+このビルドの`avr-size`出力は`text = 1340`、`data = 18`、`bss = 0`（単位：バイト）でした。静的RAM使用量（`data + bss`）は18バイトで、スタック使用量は含みません。生成ファイルは検証用の一時フォルダに置き、リポジトリには含めていません。
+
+対象デバイスは[GCCのAVRオプション](https://gcc.gnu.org/onlinedocs/gcc/AVR-Options.html)に記載されています。`_delay_us()`・`_delay_ms()`は最適化を有効にしたビルドを前提とするため、`-Os`を指定しています（[avr-libcの遅延関数仕様](https://www.nongnu.org/avr-libc/user-manual/group__util__delay.html)）。これらのコマンドは実機への書き込みやヒューズ設定を行いません。
+
+今回確認したのはビルドとファイル生成であり、実機での再動作確認、距離の計測精度、警告音の実周波数の評価は行っていません。製作時には回路の配線と実機での動作確認を行っていますが、定量評価のデータは掲載していません。
 
 ## 7. 実機写真・動作動画
 
