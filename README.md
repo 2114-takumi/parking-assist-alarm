@@ -132,11 +132,13 @@ avr-size parking-assist-alarm.elf
 
 [実機の動作動画を開く（MP4・約19秒・約12MB）](media/demo.mp4)
 
-GitHub上で再生できない場合は、[動画をダウンロード](media/demo.mp4?raw=true)してご覧ください。
+GitHub上で再生できない場合は、[動画をダウンロード](https://raw.githubusercontent.com/2114-takumi/parking-assist-alarm/main/media/demo.mp4)してご覧ください。
 
 ### 発表スライド
 
-[成果報告会の発表スライドをダウンロード（PPTX・全5枚）](docs/presentation.pptx?raw=true)
+[成果報告会の発表スライドをダウンロード（PPTX・全5枚）](https://raw.githubusercontent.com/2114-takumi/parking-assist-alarm/main/docs/presentation.pptx)
+
+[GitHub上のスライドのファイルページ](docs/presentation.pptx)からもダウンロードできます。
 
 授業の成果報告用に作成した資料です。使用部品、システム構成、変数のデータ型、警告音を生成する関数について説明しています。公開用コピーでは、学籍番号、発表者ノート、作成者などの個人メタデータと学籍番号が残るサムネイルを除いています。
 
