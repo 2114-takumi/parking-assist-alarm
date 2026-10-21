@@ -31,14 +31,14 @@ flowchart LR
     MCU --> Sounder[圧電サウンダ：警告音]
 ```
 
-| ポート名 | 接続先・役割 |
-| --- | --- |
-| PA0 | HC-SR04のTRIGへ出力 |
-| PA1 | HC-SR04のECHOから入力（`PINA`で読み取り） |
-| PA2 | 圧電サウンダへ出力 |
-| PA3 | LEDへ出力 |
+| ポート名 | スライドの回路図での表記 | 接続先・役割 |
+| --- | --- | --- |
+| PA0 | ADC0 | HC-SR04のTRIGへ出力 |
+| PA1 | ADC1 | HC-SR04のECHOから入力（`PINA`で読み取り） |
+| PA2 | ADC2 | 圧電サウンダへ出力 |
+| PA3 | ADC3 | LEDへ出力 |
 
-上表は`main.c`上のポート割り当てです。発表スライドには当時の回路図を掲載していますが、端子表記には現行コードとの相違があります（第7節参照）。
+上表は`main.c`上のポート割り当てと、スライドの回路図での表記の対応です。ATtiny84Aでは`PA0`〜`PA3`に`ADC0`〜`ADC3`の機能名もあり、同じ端子を表します（[Microchip公式データシート](https://www.microchip.com/content/dam/mchp/documents/MCU08/ProductDocuments/DataSheets/ATtiny24A-44A-84A-DataSheet-DS40002269A.pdf)）。スライドの回路図の接続先は、コードのピン割り当てと対応しています。
 
 ## 3. 動作の仕組み
 
@@ -142,7 +142,4 @@ GitHub上で再生できない場合は、[動画をダウンロード](https://
 
 授業の成果報告用に作成した資料です。使用部品、システム構成、変数のデータ型、警告音を生成する関数について説明しています。公開用コピーでは、学籍番号、発表者ノート、作成者などの個人メタデータと学籍番号が残るサムネイルを除いています。
 
-発表当時の説明を残しているため、次の点を補足します。
-
-- 資料内の回路図の端子表記は、現在の`main.c`のピン割り当てと一致しません。現行コードの割り当ては、このREADMEの「システム構成」と`main.c`を参照してください。
-- 資料中の`_delay_us()`を「マクロ」とする説明は不正確で、実際にはinline関数です。適切な動作には最適化と、コンパイル時に確定する遅延値が必要です（[avr-libc公式仕様](https://avrdudes.github.io/avr-libc/avr-libc-user-manual/group__util__delay.html)）。
+発表当時の説明を残しているため、資料中の`_delay_us()`を「マクロ」とする説明について補足します。実際にはinline関数であり、適切な動作には最適化と、コンパイル時に確定する遅延値が必要です（[avr-libc公式仕様](https://avrdudes.github.io/avr-libc/avr-libc-user-manual/group__util__delay.html)）。
