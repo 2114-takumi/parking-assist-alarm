@@ -1,0 +1,42 @@
+name: AVR build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install AVR toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-avr avr-libc binutils-avr make
+
+      - name: Record toolchain versions
+        run: |
+          avr-gcc --version
+          avr-g++ --version
+          avr-objcopy --version
+          avr-size --version
+          make --version
+          dpkg-query -W gcc-avr avr-libc binutils-avr make
+
+      # Build checks only; this workflow does not test physical hardware.
+      - name: Build C and generate Intel HEX
+        run: make c
+
+      - name: Build C++11 and generate Intel HEX
+        run: make cpp
+
+      - name: Report sizes
+        run: make size

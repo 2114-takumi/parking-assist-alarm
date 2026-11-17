@@ -1,36 +1,67 @@
 # Parking Assist Alarm System
 
-超音波距離センサーで障害物までの距離を測定し、LEDと圧電サウンダで接近を知らせる、大学の授業で製作した駐車支援システムです。
+<a id="overview"></a>
 
-[実機写真](media/overview.jpg) / [動作動画](media/demo.mp4) / [発表スライド](docs/presentation.pptx)
+## 1. Overview
 
-授業で製作したオリジナルのC言語版は[`main.c`](main.c)に保存しています。C++のクラス設計を学ぶため、Codexの支援で[`main.cpp`](main.cpp)を新たに作成しました。C++版はビルド確認済み・実機未検証です。設計と検証結果は[「8. C++版へのリファクタリング」](#8-c版へのリファクタリング)にまとめています。
+HC-SR04超音波距離センサで障害物までの距離を計測し、距離に応じてLEDの点灯・点滅と圧電サウンダの警告音を変える、大学の授業で製作した駐車支援システムです。ATtiny84A上でCによるGPIOレジスタ制御・時間制御を実装し、回路配線と実機での動作確認を経験しました。
 
-## 1. プロジェクト概要
+[実機写真](media/overview.jpg) / [動作動画](media/demo.mp4) / [発表スライド](docs/presentation.pptx) / [ビルド手順](#build)
 
-マイコンによる入出力制御、センサー計測、時間制御の基本原理を学ぶことを目的に製作しました。障害物までの距離に応じて、LEDの点灯・点滅と警告音の周波数・間隔を変え、接近を知らせます。
+| Version | Language / Toolchain | Build / HEX | Hardware tested |
+| --- | --- | --- | --- |
+| Original：[`main.c`](main.c) | C / AVR-GCC | 確認済み | **確認済み（授業制作時）** |
+| Refactored：[`main.cpp`](main.cpp) | C++11 / AVR-G++ | 確認済み | **未検証** |
 
-| 項目 | 使用技術・部品 |
-| --- | --- |
-| マイコン | ATtiny84A |
-| 距離センサー | HC-SR04（超音波距離センサー） |
-| 出力装置 | LED、圧電サウンダ |
-| プログラミング言語 | C（オリジナル版・AVR-GCC）、C++11（学習用リファクタリング版・AVR-G++） |
-| コード上のクロック周波数設定 | 8MHz（`F_CPU = 8000000UL`） |
+C++版はクラス設計を学ぶためのリファクタリングです。C版のコード生成にはClaude、C++版にはCodexの支援を利用しています。自分で行った回路配線・実機確認と、AIが支援したコード生成・リファクタリングの範囲は[What I Built / Learned](#experience)に記載しています。
 
-`F_CPU`は遅延処理などの計算に用いるクロック周波数の定義であり、定義するだけでマイコンの実際のクロックが8MHzに設定されるわけではありません。実機のクロック源・分周・ヒューズ設定とコードの設定が一致するかは未確認です。
+[構成](#architecture) · [C / C++の違い](#versions) · [経験・学習](#experience) · [詳細動作](#detailed-behavior) · [既知の課題](#limitations) · [C++設計](#cpp-refactoring) · [今後の改善](#future-improvements)
 
-## 2. システム構成
+<a id="hardware-demo"></a>
+
+## 2. Hardware Demo
+
+以下は授業で製作したC言語版の記録です。C++版の実機検証を示すものではありません。
+
+### 完成品の写真
+
+<img src="media/overview.jpg" alt="ブレッドボード、LED、接続した基板など、完成品の全体像" width="240">
+
+### 動作動画
+
+[実機の動作動画を開く（MP4・約19秒・約12MB）](media/demo.mp4)
+
+GitHub上で再生できない場合は、[動画をダウンロード](https://raw.githubusercontent.com/2114-takumi/parking-assist-alarm/main/media/demo.mp4)してご覧ください。
+
+### 発表スライド
+
+[成果報告会の発表スライドをダウンロード（PPTX・全5枚）](https://raw.githubusercontent.com/2114-takumi/parking-assist-alarm/main/docs/presentation.pptx)
+
+[GitHub上のスライドのファイルページ](docs/presentation.pptx)からもダウンロードできます。
+
+<details>
+<summary>発表資料についての補足</summary>
+
+授業の成果報告用に作成した資料です。使用部品、システム構成、変数のデータ型、警告音を生成する関数について説明しています。公開用コピーでは、学籍番号、発表者ノート、作成者などの個人メタデータと学籍番号が残るサムネイルを除いています。
+
+発表当時の説明を残しているため、資料中の`_delay_us()`を「マクロ」とする説明について補足します。実際にはinline関数であり、適切な動作には最適化と、コンパイル時に確定する遅延値が必要です（[avr-libc公式仕様](https://avrdudes.github.io/avr-libc/avr-libc-user-manual/group__util__delay.html)）。
+
+</details>
+
+<a id="architecture"></a>
+
+## 3. System Architecture
 
 ATtiny84AがHC-SR04へ測定開始信号を送り、返されたECHO信号を読み取ります。計算した距離に応じてLEDと圧電サウンダを制御します。
 
-```mermaid
-flowchart LR
-    MCU[ATtiny84A] -->|TRIG：測定開始| Sensor[HC-SR04]
-    Sensor -->|ECHO：時間情報| MCU
-    Sensor <-->|超音波| Obstacle[障害物]
-    MCU --> LED[LED：点灯・点滅]
-    MCU --> Sounder[圧電サウンダ：警告音]
+```text
+Obstacle
+  ↕ ultrasonic wave
+HC-SR04
+  ↕ TRIG / ECHO
+ATtiny84A
+  ├─ LED
+  └─ Piezo Sounder
 ```
 
 | ポート名 | スライドの回路図での表記 | 接続先・役割 |
@@ -42,7 +73,148 @@ flowchart LR
 
 上表は`main.c`・`main.cpp`共通のポート割り当てと、スライドの回路図での表記の対応です。ATtiny84Aでは`PA0`〜`PA3`に`ADC0`〜`ADC3`の機能名もあり、同じ端子を表します（[Microchip公式データシート](https://www.microchip.com/content/dam/mchp/documents/MCU08/ProductDocuments/DataSheets/ATtiny24A-44A-84A-DataSheet-DS40002269A.pdf)）。スライドの回路図の接続先は、コードのピン割り当てと対応しています。
 
-## 3. 動作の仕組み
+| 項目 | 使用技術・部品 |
+| --- | --- |
+| マイコン | ATtiny84A |
+| 距離センサー | HC-SR04（超音波距離センサー） |
+| 出力装置 | LED、圧電サウンダ |
+| プログラミング言語 | C（オリジナル版・AVR-GCC）、C++11（学習用リファクタリング版・AVR-G++） |
+| コード上のクロック周波数設定 | 8MHz（`F_CPU = 8000000UL`） |
+
+<a id="versions"></a>
+
+## 4. C vs C++
+
+C版（[`main.c`](main.c)）は授業で製作・実機確認したオリジナルです。C++11版（[`main.cpp`](main.cpp)）はCodex支援を利用してクラス設計を学ぶために作成し、ビルド確認まで行っています。**C++版の実機動作は未検証です。**
+
+両ファイルはそれぞれ独立したプログラムであり、一緒にリンクしません。C++版はセンサー・発音・全体制御を3クラスに分け、元の計測式・警告条件・ソフトウェアループ方式を維持しています。[クラス構成とC版との比較](#cpp-refactoring)は後半に記載しています。
+
+<a id="experience"></a>
+
+## 5. What I Built / Learned
+
+大学の電気電子工学系の授業で製作しました。C言語コードの大部分は生成AI（Claude）の支援で作成し、各処理の意味や動作原理を理解しながら製作を進めました。
+
+自分で担当した作業と学んだ内容は次のとおりです。
+
+- 回路の配線と実機での動作確認。
+- マイコンの入出力制御、距離測定、警告処理の動作原理の理解。
+- RAMなどの資源制約を意識した、変数のデータ型の検討。
+- 可変の遅延時間を扱う関数と、警告音を生成する関数の仕組みの学習。
+
+C++版は、上記の授業制作後にCodexの支援を利用して作成した学習用のリファクタリングです。C言語版の制作時の実機確認と区別し、C++版の実機での動作確認や性能測定はまだ行っていません。
+
+### Key Experience
+
+| 経験・学習項目 | このプロジェクトで扱った内容 |
+| --- | --- |
+| GPIO register control | `DDRA`・`PORTA`・`PINA`による入出力の設定・操作を理解 |
+| Ultrasonic time-of-flight measurement | TRIG / ECHOを使う超音波の往復時間計測と、ソフトウェアループの限界を学習 |
+| Distance calculation | 往復時間と音速から距離を計算する原理を理解 |
+| LED / sounder output | 距離ごとの点灯・点滅、矩形波による警告音生成を理解 |
+| Circuit wiring | 自分で回路を配線 |
+| Hardware testing | C版を使って実機で動作確認 |
+| AVR-GCC build | C / C++それぞれのコンパイル・リンク・HEX生成・サイズ確認 |
+
+### 技術上のポイント
+
+製作で扱った技術上のポイントは次のとおりです。
+
+- **レジスタによるGPIO制御**：`DDRA`で入出力方向を設定し、`PORTA`への書き込みと`PINA`の読み取りでセンサー・LED・圧電サウンダを扱います。
+- **超音波の往復時間による距離計算**：ECHO信号の長さを距離に換算し、警告の判定に利用します。
+- **矩形波による警告音生成**：指定周波数から半周期を計算し、HIGHとLOWを交互に出力します。可変の待ち時間は、`_delay_us(1)`を繰り返す関数で扱います。
+- **距離に応じた条件分岐**：距離を複数の範囲に分け、警告音の周波数や断続パターンを切り替えます。
+- **限られたメモリ容量への配慮**：変数が扱う値の範囲と必要な精度を考え、使用するデータ型を検討しました。授業での製作時にはメモリ使用量の削減効果を定量評価していません。C/C++版のビルドサイズは[Build](#build)に掲載しています。
+
+<a id="build"></a>
+
+## 6. Quick Start / Build
+
+### 必要なツール
+
+GNU Make、POSIX互換シェル（`mkdir`・`rm`）、AVR-GCC / AVR-G++、avr-libc、AVR binutils（`avr-objcopy`・`avr-size`）を使用します。Ubuntuでは次のパッケージで用意できます。
+
+```sh
+sudo apt-get update
+sudo apt-get install -y gcc-avr avr-libc binutils-avr make
+```
+
+WindowsでMakefileを使う場合はWSLやMSYS2などのPOSIX互換環境を使い、AVRツールチェーンの`bin`をPATHに追加してください。PowerShellで直接ビルドする場合は、下記の個別コマンドも利用できます（GNU Makeは不要）。
+
+### Makefileでビルド
+
+リポジトリのルートで実行します。
+
+```sh
+make c      # C版のコンパイル・リンク・Intel HEX生成
+make cpp    # C++11版のコンパイル・リンク・Intel HEX生成
+make size   # 両版のHEXまでビルドし、avr-sizeを表示
+make clean  # 下記4つの生成ファイルを削除
+```
+
+[`Makefile`](Makefile)は`MCU = attiny84a`、`F_CPU = 8000000UL`を使用し、既存の個別コマンドと同じフラグを設定しています。`make`のみでも両版をビルドします。出力先の`build/`はGit管理対象外です。
+
+| 版 | ELF | Intel HEX |
+| --- | --- | --- |
+| C | `build/parking-assist-alarm-c.elf` | `build/parking-assist-alarm-c.hex` |
+| C++11 | `build/parking-assist-alarm-cpp.elf` | `build/parking-assist-alarm-cpp.hex` |
+
+ツールチェーンを切り替えるときは、先に`make clean`を実行してください。ビルド済みファイルはツールのバージョン変更だけでは再生成されません。
+
+<details>
+<summary>Makeを使わない個別コマンド（既存のビルド条件）</summary>
+
+AVRツールチェーンの`bin`をPATHに追加し、リポジトリのルートで実行します。以下は従来どおりルートに出力するため、生成したELF・HEXは手動で削除してください。`make clean`の対象は`build/`内の4ファイルだけです。
+
+```sh
+avr-gcc -mmcu=attiny84a -DF_CPU=8000000UL -std=gnu99 -Os -Wall -Wextra main.c -o parking-assist-alarm-c.elf
+avr-objcopy -O ihex -R .eeprom parking-assist-alarm-c.elf parking-assist-alarm-c.hex
+avr-size parking-assist-alarm-c.elf
+
+avr-g++ -mmcu=attiny84a -DF_CPU=8000000UL -std=c++11 -Os -Wall -Wextra -fno-exceptions -fno-rtti main.cpp -o parking-assist-alarm-cpp.elf
+avr-objcopy -O ihex -R .eeprom parking-assist-alarm-cpp.elf parking-assist-alarm-cpp.hex
+avr-size parking-assist-alarm-cpp.elf
+```
+
+</details>
+
+対象デバイスは[GCCのAVRオプション](https://gcc.gnu.org/onlinedocs/gcc/AVR-Options.html)に記載されています。`_delay_us()`・`_delay_ms()`は最適化を有効にしたビルドを前提とするため、`-Os`を指定しています（[avr-libcの遅延関数仕様](https://www.nongnu.org/avr-libc/user-manual/group__util__delay.html)）。
+
+**これらの操作はビルドのみで、実機への書き込みやヒューズ設定は行いません。** `F_CPU`は遅延計算に使う定義であり、実際のクロックを8MHzに設定するものではありません。クロック源・分周・ヒューズ設定との一致は未確認です。書き込み器・書き込み手順・ヒューズ値の再現手順は本リポジトリには記録していません。
+
+### ローカルで確認したツールチェーンと結果
+
+既存の2026年10月21日のビルド記録はArduino公式配布の`7.3.0-atmel3.6.1-arduino7`（GCC/G++ 7.3.0、avr-libc 2.0.0）です。配布元とチェックサムは[Arduino公式パッケージ一覧](https://downloads.arduino.cc/packages/package_index.json)で確認できます。
+
+2026年11月17日のリポジトリ整備では、`main.c`・`main.cpp`を変更せず、次の2環境でコンパイル・リンク・Intel HEX生成・`avr-size`が警告・エラーなしで成功することを確認しました。
+
+| 実行環境 | ツールチェーン | 確認方法 |
+| --- | --- | --- |
+| Windows | Arduino公式配布 `7.3.0-atmel3.6.1-arduino7`、GCC/G++ 7.3.0 | 上記の個別コマンド相当（一時フォルダに出力） |
+| Ubuntu 24.04 / WSL | Ubuntuパッケージ `gcc-avr 1:7.3.0+Atmel3.7.0-1`、`avr-libc 1:2.0.0+Atmel3.7.0-1`、`binutils-avr 2.26.20160125+Atmel3.7.0-2`、GNU Make 4.3 | `make c`、`make cpp`、`make size` |
+
+両環境で下表と同じ結果となり、2026年10月21日の記録とも一致しました。単位はバイトです。
+
+| 版 | `text` | `data` | `bss` | Flash（`text + data`） | 静的SRAM（`data + bss`） |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| C版 | 1340 | 18 | 0 | 1358 | 18 |
+| C++版 | 1336 | 0 | 0 | 1336 | 0 |
+
+この条件ではC++版のFlashが22バイト、静的SRAMが18バイト少ない結果でした。静的SRAMは実行中のローカル変数・関数呼び出しなどが使うスタックを含みません。C++版の総SRAM使用量が0という意味ではなく、最大スタック使用量も測定していません。実行速度や実機の消費電力・計測精度を比較した結果ではありません。
+
+今回の確認はビルドと生成ファイルの検証であり、実機での再動作確認や距離・警告音の定量評価は行っていません。製作時にはC版で回路配線と実機動作を確認していますが、定量評価のデータは掲載していません。
+
+### GitHub Actions
+
+[`.github/workflows/avr-build.yml`](.github/workflows/avr-build.yml)はpush・pull request・手動実行を契機に、`ubuntu-24.04`でUbuntuパッケージのAVRツールチェーンを導入し、`make c` → `make cpp` → `make size`を実行します。C版・C++版のコンパイル／リンク、Intel HEX生成とサイズ表示を確認するCIです。
+
+Arduino配布版をCIへ導入する構成ではありません。ローカルのUbuntu環境ではGCC/G++のバージョン番号がArduino配布版と同じ7.3.0でしたが、配布パッケージは異なります。CIはパッケージバージョンを固定していないため、各実行のコンパイラとパッケージのバージョンをログに記録します。
+
+Ubuntu 24.04 / WSLで同じビルド手順を確認しましたが、**GitHub Actions上での実行は未確認**です。**CIの成功は実機検証を意味しません。C++版は実機未検証です。**
+
+<a id="detailed-behavior"></a>
+
+## 7. Detailed Behavior
 
 1. TRIGをLOWで2µs、HIGHで10µs保持した後にLOWへ戻し、超音波の送信を開始します。
 2. ECHOの立ち上がりを待ち、HIGHの間、カウンタの加算と`_delay_us(1)`を繰り返します。
@@ -74,32 +246,11 @@ flowchart LR
 
 ECHOの待機と計測には、それぞれ最大40,000回のループ制限があります。タイムアウト時は計測値を0にします。距離が0cmの場合も警告を停止するため、計測失敗と30cm以上を警告だけで区別できません。また、計算結果が1cm未満の場合も整数への切り捨てで0cmとなり、警告しません。
 
-## 4. 製作で取り組んだこと
+<a id="limitations"></a>
 
-大学の電気電子工学系の授業で製作しました。C言語コードの大部分は生成AI（Claude）の支援で作成し、各処理の意味や動作原理を理解しながら製作を進めました。
+## 8. Known Limitations（既知の課題）
 
-自分で担当した作業と学んだ内容は次のとおりです。
-
-- 回路の配線と実機での動作確認。
-- マイコンの入出力制御、距離測定、警告処理の動作原理の理解。
-- RAMなどの資源制約を意識した、変数のデータ型の検討。
-- 可変の遅延時間を扱う関数と、警告音を生成する関数の仕組みの学習。
-
-今回のC++版は、上記の授業制作後にCodexの支援を利用して作成した学習用のリファクタリングです。C言語版の制作時の実機確認と区別し、C++版の実機での動作確認や性能測定はまだ行っていません。
-
-## 5. 技術的な工夫
-
-製作で扱った技術上のポイントは次のとおりです。
-
-- **レジスタによるGPIO制御**：`DDRA`で入出力方向を設定し、`PORTA`への書き込みと`PINA`の読み取りでセンサー・LED・圧電サウンダを扱います。
-- **超音波の往復時間による距離計算**：ECHO信号の長さを距離に換算し、警告の判定に利用します。
-- **矩形波による警告音生成**：指定周波数から半周期を計算し、HIGHとLOWを交互に出力します。可変の待ち時間は、`_delay_us(1)`を繰り返す関数で扱います。
-- **距離に応じた条件分岐**：距離を複数の範囲に分け、警告音の周波数や断続パターンを切り替えます。
-- **限られたメモリ容量への配慮**：変数が扱う値の範囲と必要な精度を考え、使用するデータ型を検討しました。授業での製作時にはメモリ使用量の削減効果を定量評価していません。今回のC/C++版のビルドサイズは「8. C++版へのリファクタリング」に掲載しています。
-
-## 6. 既知の課題・今後の改善
-
-以下は現在の実装にある課題と今後の改善案です。改善案は実施済みの機能ではありません。
+両版ともハードウェアタイマーを使わず、ソフトウェアループで計測・発音しています。以下は現在の実装にある課題と今後の改善案です。改善案は実施済みの機能ではありません。
 
 | 課題・確認点 | 今後の改善案 |
 | --- | --- |
@@ -110,53 +261,13 @@ ECHOの待機と計測には、それぞれ最大40,000回のループ制限が�
 | 発音処理や待ち時間の間は次の距離測定を行わず、距離ごとに再測定までの間隔が変わる。 | 必要に応じてタイマーや状態管理を使い、警告動作を非ブロッキング化する。 |
 | コード上の8MHz設定と実機クロックの一致が未確認。 | クロック源、分周、ヒューズ設定を確認し、計測・警告音の時間計算と対応させる。 |
 
-### C言語版のビルド確認
+<a id="cpp-refactoring"></a>
 
-2026年10月21日、公開する`main.c`をWindows環境でビルドし、警告・エラーなしでコンパイルとリンクが成功することを確認しました。Intel HEX形式のファイル生成も確認済みです。今回のC++版との比較でも、元の`main.c`を変更せずに再ビルドしています。
-
-使用したツールチェーンはArduino公式配布のAVR-GCC（`7.3.0-atmel3.6.1-arduino7`、GCC 7.3.0、avr-libc 2.0.0）です。配布元とチェックサムは[Arduino公式パッケージ一覧](https://downloads.arduino.cc/packages/package_index.json)で確認できます。次のコマンド相当で検証しました。
-
-```sh
-avr-gcc -mmcu=attiny84a -DF_CPU=8000000UL -std=gnu99 -Os -Wall -Wextra main.c -o parking-assist-alarm-c.elf
-avr-objcopy -O ihex -R .eeprom parking-assist-alarm-c.elf parking-assist-alarm-c.hex
-avr-size parking-assist-alarm-c.elf
-```
-
-このビルドの`avr-size`出力は`text = 1340`、`data = 18`、`bss = 0`（単位：バイト）でした。静的RAM使用量（`data + bss`）は18バイトで、スタック使用量は含みません。生成ファイルは検証用の一時フォルダに置き、リポジトリには含めていません。
-
-対象デバイスは[GCCのAVRオプション](https://gcc.gnu.org/onlinedocs/gcc/AVR-Options.html)に記載されています。`_delay_us()`・`_delay_ms()`は最適化を有効にしたビルドを前提とするため、`-Os`を指定しています（[avr-libcの遅延関数仕様](https://www.nongnu.org/avr-libc/user-manual/group__util__delay.html)）。これらのコマンドは実機への書き込みやヒューズ設定を行いません。
-
-今回確認したのはビルドとファイル生成であり、実機での再動作確認、距離の計測精度、警告音の実周波数の評価は行っていません。製作時には回路の配線と実機での動作確認を行っていますが、定量評価のデータは掲載していません。
-
-## 7. 実機写真・動作動画・発表資料
-
-以下は授業で製作したC言語版の記録です。C++版の実機検証を示すものではありません。
-
-### 完成品の写真
-
-<img src="media/overview.jpg" alt="ブレッドボード、LED、接続した基板など、完成品の全体像" width="480">
-
-### 動作動画
-
-[実機の動作動画を開く（MP4・約19秒・約12MB）](media/demo.mp4)
-
-GitHub上で再生できない場合は、[動画をダウンロード](https://raw.githubusercontent.com/2114-takumi/parking-assist-alarm/main/media/demo.mp4)してご覧ください。
-
-### 発表スライド
-
-[成果報告会の発表スライドをダウンロード（PPTX・全5枚）](https://raw.githubusercontent.com/2114-takumi/parking-assist-alarm/main/docs/presentation.pptx)
-
-[GitHub上のスライドのファイルページ](docs/presentation.pptx)からもダウンロードできます。
-
-授業の成果報告用に作成した資料です。使用部品、システム構成、変数のデータ型、警告音を生成する関数について説明しています。公開用コピーでは、学籍番号、発表者ノート、作成者などの個人メタデータと学籍番号が残るサムネイルを除いています。
-
-発表当時の説明を残しているため、資料中の`_delay_us()`を「マクロ」とする説明について補足します。実際にはinline関数であり、適切な動作には最適化と、コンパイル時に確定する遅延値が必要です（[avr-libc公式仕様](https://avrdudes.github.io/avr-libc/avr-libc-user-manual/group__util__delay.html)）。
-
-## 8. C++版へのリファクタリング
+## 9. C++ Refactoring
 
 ### 目的とC言語版との違い
 
-`main.cpp`は、元の処理を役割ごとにクラスへ分け、C++の設計を学ぶために作成しました。`main.c`は今回の変更で一切変更していません。両ファイルはそれぞれ独立したプログラムなので、ビルドする版を1つ選びます。
+`main.cpp`は、元の処理を役割ごとにクラスへ分け、C++の設計を学ぶために作成しました。オリジナルの`main.c`を残しています。両ファイルはそれぞれ独立したプログラムなので、ビルドする版を1つ選びます。
 
 | 観点 | C言語版：`main.c` | C++版：`main.cpp` |
 | --- | --- | --- |
@@ -188,37 +299,25 @@ GitHub上で再生できない場合は、[動画をダウンロード](https://
 
 ### 維持した動作と実時間に関する注意
 
-ピン割り当て、距離の条件分岐、警告音の周波数・鳴動時間・停止時間は「3. 動作の仕組み」のままです。距離計算`duration * 0.034 / 2`と`long`への変換による小数部の切り捨て、40,000回のループによるタイムアウト、0cm・タイムアウト時の警告停止も維持しています。主要な計算変数はC版と同じ型で、このAVR環境では`unsigned int`が16ビット、`long`・`unsigned long`が32ビットです。
+ピン割り当て、距離の条件分岐、警告音の周波数・鳴動時間・停止時間は[Detailed Behavior](#detailed-behavior)のままです。距離計算`duration * 0.034 / 2`と`long`への変換による小数部の切り捨て、40,000回のループによるタイムアウト、0cm・タイムアウト時の警告停止も維持しています。主要な計算変数はC版と同じ型で、このAVR環境では`unsigned int`が16ビット、`long`・`unsigned long`が32ビットです。
 
 発音処理と待ち時間はブロッキング方式のままで、その間は距離を再測定しません。タイマーへの置き換えや計測方式の変更は今回行っていません。クラス化やコンパイラのインライン化によって命令列が変わるため、ソフトウェアループで決まる実際の時間や周波数はC版と異なる可能性があります。実機での完全な動作一致や精度向上は確認していません。
 
-### コンパイル方法と検証結果
-
-2026年10月21日、Windows環境でAVR-G++を使用し、ATtiny84A・8MHz・C++11・`-Os`の条件でコンパイル、リンク、HEX生成を確認しました。C版・C++版ともに警告・エラーはありませんでした。ツールチェーンはC版と同じArduino公式配布の`7.3.0-atmel3.6.1-arduino7`（GCC/G++ 7.3.0、avr-libc 2.0.0）です。
-
-AVRツールチェーンの`bin`をPATHに追加した環境で、リポジトリのルートから次のコマンドを実行できます。C版のコマンドは「6. 既知の課題・今後の改善」に掲載しています。
-
-```sh
-avr-g++ -mmcu=attiny84a -DF_CPU=8000000UL -std=c++11 -Os -Wall -Wextra -fno-exceptions -fno-rtti main.cpp -o parking-assist-alarm-cpp.elf
-avr-objcopy -O ihex -R .eeprom parking-assist-alarm-cpp.elf parking-assist-alarm-cpp.hex
-avr-size parking-assist-alarm-cpp.elf
-```
-
-両版を比較する場合はC版もビルドし、`avr-size parking-assist-alarm-c.elf parking-assist-alarm-cpp.elf`で並べて確認できます。
-
-`avr-size`による今回のビルド結果は次のとおりです。単位はバイトです。
-
-| 版 | `text` | `data` | `bss` | Flash（`text + data`） | 静的SRAM（`data + bss`） |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| C版 | 1340 | 18 | 0 | 1358 | 18 |
-| C++版 | 1336 | 0 | 0 | 1336 | 0 |
-
-この条件ではC++版のFlashが22バイト、静的SRAMが18バイト少ない結果でした。静的SRAMの値は、実行中のローカル変数・関数呼び出しなどが使うスタックを含みません。C++版の総SRAM使用量が0という意味ではなく、最大スタック使用量も測定していません。実行速度や実機の消費電力・計測精度を比較した結果ではありません。
-
-検証用のELF・HEXファイルはリポジトリには含めていません。ソースレビューでは判定境界（0、4、5、14、15、29、30cm）とタイムアウト処理をC版と照合し、生成コードでもGPIOの設定順を確認しました。これらは実機動作の検証ではなく、実機への書き込み、C++版の動作確認、実際の周波数・応答時間の測定は未実施です。
-
-### コードを読む順序と今後の改善
+### コードを読む順序
 
 学習時は、まず`main()`から`ParkingAssist::run()`をたどり、「測る→警告する」という流れを確認します。次に`updateAlarm()`をC版の条件分岐と比べ、`UltrasonicSensor::measureDistanceCm()`、`Buzzer::beep()`の順に読みます。最後にコンストラクタ・`private`の定数・メンバの宣言へ戻ると、処理を変えずに責務と公開範囲を整理した点を確認できます。
 
-今後の確認事項は、C版とC++版を同じ実機・既知の距離で比較し、クロック設定、距離測定、警告音の周波数と時間を確かめることです。ハードウェアタイマーによる計測・波形生成、測定値の安定化、必要に応じた非ブロッキング化は、今後の改善案として検討します。
+### 過去のレビューと検証範囲
+
+2026年10月21日の記録では、ソースレビューで判定境界（0、4、5、14、15、29、30cm）とタイムアウト処理をC版と照合し、生成コードでもGPIOの設定順を確認しています。これらは実機動作の検証ではありません。C++版の実機への書き込み、動作確認、実際の周波数・応答時間の測定は未実施です。
+
+<a id="future-improvements"></a>
+
+## 10. Future Improvements
+
+以下は未実施の改善・確認予定です。
+
+- C版とC++版を同じ実機・既知の距離で比較し、クロック設定、距離測定、警告音の周波数と時間を確認する。
+- クロック源・分周・ヒューズ設定、書き込み器と書き込み手順を記録し、実機を再現するための情報を補う。
+- ハードウェアタイマーによるECHO計測と波形生成、実時間によるタイムアウトを検討する。
+- 測定値の安定化と計測失敗の区別、必要に応じた警告処理の非ブロッキング化を検討する。
