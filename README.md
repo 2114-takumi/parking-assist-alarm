@@ -1,5 +1,7 @@
 # Parking Assist Alarm System
 
+[![AVR Build](https://github.com/2114-takumi/parking-assist-alarm/actions/workflows/avr-build.yml/badge.svg)](https://github.com/2114-takumi/parking-assist-alarm/actions/workflows/avr-build.yml)
+
 <a id="overview"></a>
 
 ## 1. Overview
